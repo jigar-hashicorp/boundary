@@ -34,7 +34,7 @@ type AppToken struct {
 
 	// Output only. The ID of the AppToken.
 	Id string `protobuf:"bytes,10,opt,name=id,proto3" json:"id,omitempty" class:"public" eventstream:"observation"` // @gotags: `class:"public" eventstream:"observation"`
-	// Output only. Scope information for the AppToken.
+	// Output only. Scope information for the Account.
 	Scope *scopes.ScopeInfo `protobuf:"bytes,20,opt,name=scope,proto3" json:"scope,omitempty"`
 	// Optional name for identification purposes.
 	Name *wrapperspb.StringValue `protobuf:"bytes,30,opt,name=name,proto3" json:"name,omitempty" class:"public"` // @gotags: `class:"public"`
