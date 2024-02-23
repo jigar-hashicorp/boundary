@@ -119,4 +119,9 @@ const (
 	StoragePolicyIdField                        = "storage_policy_id"
 	RetainUntilField                            = "retain_until"
 	DeleteAfterField                            = "delete_after"
+	CreatedByField                              = "created_by"
+	ExpirationIntervalField                     = "expiration_interval"
+	CanonicalGrantField                         = "canonical_grant_field"
+	JsonGrantField                              = "json_grant"
+	RawGrantField                               = "raw_grant"
 )
