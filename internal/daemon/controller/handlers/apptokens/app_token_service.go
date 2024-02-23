@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/boundary/internal/daemon/controller/handlers"
 	"github.com/hashicorp/boundary/internal/errors"
 	pbs "github.com/hashicorp/boundary/internal/gen/controller/api/services"
+	"github.com/hashicorp/boundary/internal/perms"
 	"github.com/hashicorp/boundary/internal/types/action"
 	"github.com/hashicorp/boundary/internal/types/resource"
 	apptokens "github.com/hashicorp/boundary/sdk/pbs/controller/api/resources/apptokens"
@@ -276,7 +277,7 @@ func toProto(ctx context.Context, in apptoken.AppToken, opt ...handlers.Option) 
 	}
 	if outputFields.Has(globals.GrantsField) {
 		for _, g := range in.GetGrants() {
-			grant, err := grantToProto(ctx, g, opt...)
+			grant, err := grantToProto(ctx, g, in.GetScopeId(), opt...)
 			if err != nil {
 				return nil, err
 			}
@@ -285,7 +286,6 @@ func toProto(ctx context.Context, in apptoken.AppToken, opt ...handlers.Option) 
 		}
 	}
 	if outputFields.Has(globals.GrantScopeIdField) {
-		// TODO: regenerate proto to include GrantScopeId
 		out.GrantScopeId = wrapperspb.String(in.GetGrantScopeId())
 	}
 	if outputFields.Has(globals.ScopeField) {
@@ -296,24 +296,52 @@ func toProto(ctx context.Context, in apptoken.AppToken, opt ...handlers.Option) 
 }
 
 // TODO: convert all grants and return an array of grants
-func grantToProto(ctx context.Context, in *store.AppTokenGrant, opt ...handlers.Option) (*apptokens.Grant, error) {
+func grantToProto(ctx context.Context, in *store.AppTokenGrant, scopeId string, opt ...handlers.Option) (*apptokens.Grant, error) {
 	const op = "apptoken_service.grantToProto"
+
+	switch {
+	case in == nil:
+		return nil, handlers.ApiErrorWithCodeAndMessage(codes.Internal, "nil grant when building apptoken_grant proto")
+	case scopeId == "":
+		return nil, errors.New(ctx, "scope id is empty when building apptoken_grant proto")
+	}
+
 	opts := handlers.GetOpts(opt...)
 	if opts.WithOutputFields == nil {
 		return nil, handlers.ApiErrorWithCodeAndMessage(codes.Internal, "output fields not found when building apptoken_grant proto")
 	}
 	outputFields := *opts.WithOutputFields
 
-	out := apptokens.Grant{}
+	out := &apptokens.Grant{}
 	if outputFields.Has(globals.CanonicalGrantField) {
 		out.Canonical = in.GetCanonicalGrant()
 	}
 	if outputFields.Has(globals.JsonGrantField) {
 		// TODO: replicate https://github.com/hashicorp/boundary/blob/590228d956fe4099eac1ae43d0d8d0bc3869d009/internal/daemon/controller/handlers/roles/role_service.go#L942-L947
-		// out.Json = in.
+		parsed, err := perms.Parse(ctx, scopeId, in.GetRawGrant())
+		if err != nil {
+			// This should never happen as we validate on the way in, but let's
+			// return what we can since we are still returning the raw grant
+			out = &pb.Grant{
+				Raw:       in.GetRawGrant(),
+				Canonical: "<parse_error>",
+				Json:      nil,
+			}
+		} else {
+			_, actions := parsed.Actions()
+			out = &pb.Grant{
+				Raw:       in.GetRawGrant(),
+				Canonical: in.GetCanonicalGrant(),
+				Json: &pb.GrantJson{
+					Ids:     parsed.Ids(),
+					Type:    parsed.Type().String(),
+					Actions: actions,
+				},
+			}
+		}
 	}
 	if outputFields.Has(globals.RawGrantField) {
 		out.Raw = in.GetRawGrant()
 	}
-	return &out, nil
+	return out, nil
 }
